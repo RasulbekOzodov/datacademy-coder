@@ -57,9 +57,10 @@ async function main(): Promise<void> {
   // `datacademy_coder login` — connect this machine to a DataCademy account (device-code flow).
   if (subcommand === 'login') {
     const ok = await runLogin();
-    process.exit(ok ? 0 : 1);
-  }
-  if (subcommand) throw new Error(`Noma'lum buyruq: ${subcommand}. Mavjud: login (yoki --help)`);
+    if (!ok) process.exit(1);
+    out(`\n${pc.dim('davom etamiz — REPL ochilmoqda (chiqish: /exit)')}\n`);
+    // fall through: start the REPL with the freshly written config
+  } else if (subcommand) throw new Error(`Noma'lum buyruq: ${subcommand}. Mavjud: login (yoki --help)`);
 
   const cwd = path.resolve(opts.cwd ?? process.cwd());
   if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {

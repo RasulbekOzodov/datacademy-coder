@@ -71,12 +71,25 @@ export async function runLogin(signal?: AbortSignal): Promise<boolean> {
       return false;
     }
     const baseUrl = data.base_url ?? `${base}/v1`;
-    const model = data.model ?? 'datacademy-pro';
+    const model = data.model ?? 'datacademy-max';
     const file = writeGlobalConfig(GATEWAY_PROVIDER_NAME, {
       [GATEWAY_PROVIDER_NAME]: { type: 'openai', baseUrl, apiKey: data.api_key, model, contextWindow: 131072, temperature: 0.1, maxTokens: 8192 },
     });
-    out(`\n${pc.green('✓')} ulandi — model ${pc.bold(model)}, config: ${pc.dim(file)}\n`);
-    out(pc.dim(`  ${APP_NAME} — ishga tushirish · /usage — balans · /model datacademy-fast — arzon model\n`));
+    out(`\n${pc.green('✓')} ulandi ${pc.dim(`(config: ${file})`)}\n`);
+    // Show the account state right away so "model" is not mistaken for the plan.
+    try {
+      const res = await fetch(`${baseUrl}/usage`, { headers: { authorization: `Bearer ${data.api_key}` }, signal });
+      if (res.ok) {
+        const u = (await res.json()) as Record<string, unknown>;
+        const n = (v: unknown) => Number(v ?? 0).toLocaleString('ru-RU');
+        out(`  hisob:  ${String(u.email ?? '')}\n`);
+        out(`  tarif:  ${u.plan_label ? String(u.plan_label) : "yo'q (sinov kreditlari)"}\n`);
+        out(`  balans: ${n(u.total_remaining)} kredit${u.plan_label ? '' : ` — tarif: ${base}/pricing`}\n`);
+      }
+    } catch {
+      /* summary is optional */
+    }
+    out(pc.dim(`  model: ${model} (eng kuchli) · /model datacademy-fast — arzon rejim · /usage — balans\n`));
     return true;
   }
   out(`${pc.red('✗ kod muddati tugadi (10 daqiqa). Qayta: ' + APP_NAME + ' login')}\n`);
