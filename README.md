@@ -41,11 +41,26 @@ ollama serve                     # odatda avtomatik ishlaydi
 
 > 0.5b/1.5b modellar tool-calling uchun juda zaif (bir xil chaqiruvni takrorlaydi, cwd'ni noto'g'ri nusxalaydi) — ular faqat ulanishni tekshirish uchun. Ish uchun kamida 3b, iloji bo'lsa 7b (`qwen2.5-coder`, `qwen3`, `devstral`, `codellama` kabi tool-qo'llaydigan modellar).
 
+## Birinchi ishga tushirish
+
+Config bo'lmasa `datacademy_coder` avtomatik **sozlash ustasini** ochadi (keyin istalgan vaqt `datacademy_coder --setup`):
+
+```
+DataCademy Coder — birinchi sozlash
+  1. Lokal model (Ollama) — bepul, oflayn
+  2. Bulut API (DeepSeek / Qwen / OpenAI / boshqa) — tez va kuchli, API kalit kerak
+Tanlang [1-2, Enter = 1]:
+```
+
+- **Lokal**: Ollama'dagi modellar ro'yxatidan tanlaysiz (yoki nom kiritasiz); Ollama ishlamayotgan bo'lsa o'rnatish havolasi ko'rsatiladi.
+- **API**: provider (DeepSeek V4 Pro / Qwen3-Coder-Next via OpenRouter / OpenAI / boshqa OpenAI-uyg'un manzil) → model → API kalit. Kalit darhol tekshiriladi (noto'g'ri bo'lsa qayta so'raydi) va `~/.datacademy_coder/config.json` ga yoziladi; bo'sh qoldirsangiz muhit o'zgaruvchisidan (`DEEPSEEK_API_KEY` kabi) olinadi. Lokal Ollama ham zaxira sifatida config'ga qo'shiladi (`--provider ollama`).
+
 ## Ishlatish
 
 ```powershell
 cd loyiha-papkasi
 datacademy_coder                  # interaktiv REPL
+datacademy_coder --setup          # sozlash ustasi (lokal ↔ API)
 datacademy_coder -p "package.json dagi skriptlarni sanab ber"   # bitta so'rov, chiqish
 datacademy_coder --model qwen2.5-coder:3b
 datacademy_coder --provider lmstudio

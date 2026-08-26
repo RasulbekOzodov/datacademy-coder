@@ -13,6 +13,7 @@ import { PermissionManager } from './permissions/manager.js';
 import { createDefaultTools } from './tools/registry.js';
 import { shellFallbackNote } from './tools/shell.js';
 import { LineReader, TerminalUI, makePrompter, startRepl } from './ui/repl.js';
+import { hasAnyConfig, runSetupWizard } from './ui/setup.js';
 import { out } from './ui/render.js';
 const program = new Command();
 program
@@ -27,6 +28,7 @@ program
     .option('--tool-mode <mode>', 'native | text | auto (default: config or auto)')
     .option('--debug', 'write raw requests/responses to .datacademy_coder/logs/')
     .option('--init', 'write an example config to ./.datacademy_coder/config.json and exit')
+    .option('--setup', 'run the first-time setup wizard (local Ollama or cloud API)')
     .option('-c, --continue', 'continue the most recent conversation in this folder')
     .option('-r, --resume [id]', 'resume a previous conversation (pick from a list, or give its id)')
     .parse(process.argv);
@@ -48,6 +50,18 @@ async function main() {
         out(`${pc.green(`wrote ${file}`)}\n${pc.dim('edit the model / baseUrl, then run the agent again')}\n`);
         return;
     }
+    const oneShot = typeof opts.prompt === 'string';
+    const reader = new LineReader();
+    // First run (no config anywhere) or --setup: ask where the model runs (local Ollama vs cloud API).
+    if (opts.setup || (!hasAnyConfig(cwd) && process.stdin.isTTY && !oneShot)) {
+        const done = await runSetupWizard(reader);
+        if (opts.setup && !done) {
+            out(`${pc.dim('setup bekor qilindi')}\n`);
+            reader.close();
+            return;
+        }
+        out('\n');
+    }
     const { config, sources } = loadConfig(cwd, {
         provider: opts.provider,
         model: opts.model,
@@ -56,16 +70,19 @@ async function main() {
         toolMode: opts.toolMode,
     });
     const provider = createProviderFromConfig(config);
-    await provider.healthCheck();
-    // Surface "model not found" early with a pull hint.
-    await provider.capabilities();
+    try {
+        await provider.healthCheck();
+        // Surface "model not found" early with a pull hint.
+        await provider.capabilities();
+    }
+    catch (err) {
+        throw new Error(`${err.message}\n${pc.dim(`Sozlashni o'zgartirish: ${APP_NAME} --setup   (yoki boshqa provider: ${APP_NAME} --provider <nom>)`)}`);
+    }
     const { registry, shell } = createDefaultTools(config);
     if (shellFallbackNote)
         out(`${pc.yellow(`⚠ ${shellFallbackNote}`)}\n`);
     const sessionId = newSessionId();
     const debug = new DebugLog(cwd, config.debug, sessionId);
-    const oneShot = typeof opts.prompt === 'string';
-    const reader = new LineReader();
     const permissions = new PermissionManager({ mode: config.permissions.mode, allow: config.permissions.allow }, makePrompter(reader));
     const ui = new TerminalUI();
     const agent = new Agent({ provider, tools: registry, shell, permissions, config, ui, cwd, debug });
