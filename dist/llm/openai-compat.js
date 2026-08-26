@@ -1,5 +1,5 @@
 import { jsonrepair } from 'jsonrepair';
-import { describeFetchError, fetchJson, readSse } from './stream-readers.js';
+import { describeFetchError, fetchJson, isConnectionReset, readSse } from './stream-readers.js';
 import { ProviderHttpError, ToolsUnsupportedError, } from './types.js';
 function toOpenAIMessages(messages) {
     return messages.map((m) => {
@@ -173,7 +173,7 @@ export class OpenAICompatProvider {
             body.stop = req.options.stop;
         if (req.tools?.length)
             body.tools = toOpenAITools(req.tools);
-        const post = async (payload) => {
+        const post = async (payload, attempt = 1) => {
             try {
                 return await fetch(`${this.baseUrl}/chat/completions`, {
                     method: 'POST',
@@ -185,6 +185,9 @@ export class OpenAICompatProvider {
             catch (err) {
                 if (err.name === 'AbortError')
                     throw err;
+                // A stale keep-alive socket (server closed it while we were idle) resets on first use; retry once.
+                if (attempt === 1 && isConnectionReset(err))
+                    return post(payload, 2);
                 throw new Error(`OpenAI-compatible server ${describeFetchError(err, this.baseUrl)}`);
             }
         };

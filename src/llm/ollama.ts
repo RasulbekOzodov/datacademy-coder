@@ -1,5 +1,5 @@
 import type { OllamaProviderConfig } from '../config/schema.js';
-import { describeFetchError, fetchJson, readNdjson } from './stream-readers.js';
+import { describeFetchError, fetchJson, isConnectionReset, readNdjson } from './stream-readers.js';
 import {
   ProviderHttpError,
   ToolsUnsupportedError,
@@ -158,18 +158,21 @@ export class OllamaProvider implements LLMProvider {
     if (caps.thinking) body.think = false;
     if (req.tools?.length) body.tools = toOllamaTools(req.tools);
 
-    let res: Response;
-    try {
-      res = await fetch(`${this.baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: req.signal,
-      });
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') throw err;
-      throw new Error(`Ollama ${describeFetchError(err, this.baseUrl)}`);
-    }
+    const post = async (attempt = 1): Promise<Response> => {
+      try {
+        return await fetch(`${this.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: req.signal,
+        });
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') throw err;
+        if (attempt === 1 && isConnectionReset(err)) return post(2); // stale keep-alive socket
+        throw new Error(`Ollama ${describeFetchError(err, this.baseUrl)}`);
+      }
+    };
+    const res = await post();
     if (!res.ok || !res.body) {
       const text = await res.text().catch(() => '');
       if (res.status === 400 && /does not support tools/i.test(text)) {

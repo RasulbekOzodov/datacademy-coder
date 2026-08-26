@@ -1,6 +1,6 @@
 import { jsonrepair } from 'jsonrepair';
 import type { OpenAIProviderConfig } from '../config/schema.js';
-import { describeFetchError, fetchJson, readSse } from './stream-readers.js';
+import { describeFetchError, fetchJson, isConnectionReset, readSse } from './stream-readers.js';
 import {
   ProviderHttpError,
   ToolsUnsupportedError,
@@ -196,7 +196,7 @@ export class OpenAICompatProvider implements LLMProvider {
     if (req.options?.stop?.length) body.stop = req.options.stop;
     if (req.tools?.length) body.tools = toOpenAITools(req.tools);
 
-    const post = async (payload: Record<string, unknown>): Promise<Response> => {
+    const post = async (payload: Record<string, unknown>, attempt = 1): Promise<Response> => {
       try {
         return await fetch(`${this.baseUrl}/chat/completions`, {
           method: 'POST',
@@ -206,6 +206,8 @@ export class OpenAICompatProvider implements LLMProvider {
         });
       } catch (err) {
         if ((err as Error).name === 'AbortError') throw err;
+        // A stale keep-alive socket (server closed it while we were idle) resets on first use; retry once.
+        if (attempt === 1 && isConnectionReset(err)) return post(payload, 2);
         throw new Error(`OpenAI-compatible server ${describeFetchError(err, this.baseUrl)}`);
       }
     };

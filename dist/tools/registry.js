@@ -28,8 +28,8 @@ export class ToolRegistry {
         return this.list().map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
     }
 }
-export function createDefaultTools(config) {
-    const shell = resolveShell(config);
+export async function createDefaultTools(config) {
+    const shell = await resolveShell(config);
     const registry = new ToolRegistry()
         .register(readFileTool)
         .register(listDirTool)

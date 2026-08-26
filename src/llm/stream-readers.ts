@@ -55,6 +55,13 @@ export async function fetchJson<T = unknown>(url: string, init: RequestInit & { 
   }
 }
 
+/** True for "socket hang up"-style failures where the request never reached the server (safe to retry). */
+export function isConnectionReset(err: unknown): boolean {
+  const e = err as { cause?: { code?: string }; code?: string; message?: string };
+  const code = e?.cause?.code ?? e?.code;
+  return code === 'ECONNRESET' || code === 'EPIPE' || code === 'UND_ERR_SOCKET' || /socket hang up|other side closed/i.test(e?.message ?? '');
+}
+
 export function describeFetchError(err: unknown, baseUrl: string): string {
   const e = err as { cause?: { code?: string }; name?: string; message?: string };
   const code = e?.cause?.code;

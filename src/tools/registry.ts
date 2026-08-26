@@ -37,8 +37,8 @@ export class ToolRegistry {
   }
 }
 
-export function createDefaultTools(config: Config): { registry: ToolRegistry; shell: ResolvedShell } {
-  const shell = resolveShell(config);
+export async function createDefaultTools(config: Config): Promise<{ registry: ToolRegistry; shell: ResolvedShell }> {
+  const shell = await resolveShell(config);
   const registry = new ToolRegistry()
     .register(readFileTool)
     .register(listDirTool)

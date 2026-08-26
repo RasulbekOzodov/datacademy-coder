@@ -91,6 +91,10 @@ async function main(): Promise<void> {
     toolMode: opts.toolMode,
   });
 
+  // Shell probe first (it may take up to 8s), then the provider check — keeps HTTP connections fresh.
+  const { registry, shell } = await createDefaultTools(config);
+  if (shellFallbackNote) out(`${pc.yellow(`⚠ ${shellFallbackNote}`)}\n`);
+
   const provider = createProviderFromConfig(config);
   try {
     await provider.healthCheck();
@@ -99,9 +103,6 @@ async function main(): Promise<void> {
   } catch (err) {
     throw new Error(`${(err as Error).message}\n${pc.dim(`Sozlashni o'zgartirish: ${APP_NAME} --setup   (yoki boshqa provider: ${APP_NAME} --provider <nom>)`)}`);
   }
-
-  const { registry, shell } = createDefaultTools(config);
-  if (shellFallbackNote) out(`${pc.yellow(`⚠ ${shellFallbackNote}`)}\n`);
   const sessionId = newSessionId();
   const debug = new DebugLog(cwd, config.debug, sessionId);
 

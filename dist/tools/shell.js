@@ -11,25 +11,45 @@ function onPath(exe) {
     found.set(exe, ok);
     return ok;
 }
-/** Quick startup probe: some environments (no console, locked-down hosts) make powershell.exe hang. */
+/**
+ * Quick startup probe: some environments (no console, locked-down hosts) make powershell.exe hang.
+ * Async so the event loop keeps running (a blocked loop makes HTTP keep-alive sockets go stale).
+ */
 function shellStarts(exe, args, timeoutMs = 8000) {
-    try {
-        const r = spawnSync(exe, args, { windowsHide: true, timeout: timeoutMs, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
-        return r.status === 0 && /ok/.test(r.stdout ?? '');
-    }
-    catch {
-        return false;
-    }
+    return new Promise((resolve) => {
+        let out = '';
+        let child;
+        try {
+            child = spawn(exe, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+        }
+        catch {
+            resolve(false);
+            return;
+        }
+        const timer = setTimeout(() => {
+            killTree(child.pid);
+            resolve(false);
+        }, timeoutMs);
+        child.stdout?.on('data', (d) => (out += d.toString('utf8')));
+        child.on('error', () => {
+            clearTimeout(timer);
+            resolve(false);
+        });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            resolve(code === 0 && /ok/.test(out));
+        });
+    });
 }
 /** Set when `auto` had to fall back to another shell; the CLI shows it once. */
 export let shellFallbackNote;
-export function resolveShell(config) {
+export async function resolveShell(config) {
     let kind;
     if (config.shell === 'auto') {
         if (process.platform === 'win32') {
-            if (onPath('pwsh') && shellStarts('pwsh', ['-NoProfile', '-NonInteractive', '-Command', 'echo ok']))
+            if (onPath('pwsh') && (await shellStarts('pwsh', ['-NoProfile', '-NonInteractive', '-Command', 'echo ok'])))
                 kind = 'pwsh';
-            else if (shellStarts('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'echo ok']))
+            else if (await shellStarts('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'echo ok']))
                 kind = 'powershell';
             else {
                 kind = 'cmd';
@@ -41,6 +61,9 @@ export function resolveShell(config) {
     }
     else
         kind = config.shell;
+    return shellFor(kind);
+}
+export function shellFor(kind) {
     switch (kind) {
         case 'pwsh':
         case 'powershell': {
