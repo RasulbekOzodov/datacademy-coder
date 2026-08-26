@@ -42,7 +42,8 @@ $installed = $false
 try { npm install -g $Package --no-fund --no-audit 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $installed = $true } } catch {}
 if (-not $installed) {
   Write-Step "npm registry'da topilmadi — GitHub'dan o'rnatilmoqda"
-  npm install -g "github:RasulbekOzodov/datacademy-coder" --no-fund --no-audit | Out-Null
+  # tarball URL (not github:) — npm on Windows mis-links global git installs to a temp clone
+  npm install -g "https://github.com/RasulbekOzodov/datacademy-coder/archive/refs/heads/main.tar.gz" --no-fund --no-audit | Out-Null
 }
 Refresh-Path
 if (-not (Has-Command datacademy_coder)) { Write-Host "npm global papkasi PATH da emas. 'npm config get prefix' papkasini PATH ga qo'shing." -ForegroundColor Yellow }

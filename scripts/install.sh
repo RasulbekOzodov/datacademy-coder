@@ -36,7 +36,7 @@ step "$PACKAGE o'rnatilmoqda (npm)"
 SPEC="$PACKAGE"
 if ! npm view "$PACKAGE" version >/dev/null 2>&1; then
   step "npm registry'da topilmadi — GitHub'dan o'rnatiladi"
-  SPEC="github:RasulbekOzodov/datacademy-coder"
+  SPEC="https://github.com/RasulbekOzodov/datacademy-coder/archive/refs/heads/main.tar.gz"
 fi
 if npm install -g "$SPEC" --no-fund --no-audit >/dev/null 2>&1; then :; else
   step "ruxsat kerak — sudo bilan qayta"; sudo npm install -g "$SPEC" --no-fund --no-audit >/dev/null

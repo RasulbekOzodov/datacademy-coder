@@ -16,10 +16,11 @@ curl -fsSL https://raw.githubusercontent.com/RasulbekOzodov/datacademy-coder/mai
 ```
 Variantlar: `DATACADEMY_MODEL=qwen2.5-coder:3b` (kichik model), `DATACADEMY_SKIP_OLLAMA=1` (faqat bulut API).
 
-Yoki Node.js 20+ bo'lsa to'g'ridan-to'g'ri npm'dan:
+Yoki Node.js 20+ bo'lsa to'g'ridan-to'g'ri npm'dan (yoki, paket npm'ga chiqmagan bo'lsa, GitHub tarball'dan):
 
 ```powershell
 npm install -g datacademy-coder
+npm install -g https://github.com/RasulbekOzodov/datacademy-coder/archive/refs/heads/main.tar.gz
 ```
 
 Manbadan (dasturchilar uchun):
