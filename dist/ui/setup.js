@@ -5,6 +5,7 @@ import { globalConfigDir } from '../config/load.js';
 import { APP_DISPLAY_NAME, APP_NAME } from '../constants.js';
 import { createProvider } from '../llm/registry.js';
 import { fetchJson } from '../llm/stream-readers.js';
+import { gatewayUrl, runLogin } from './login.js';
 import { out } from './render.js';
 const CLOUD_PRESETS = [
     { key: 'deepseek', label: 'DeepSeek V4 Pro — arzon va kuchli (api.deepseek.com)', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-pro', keyHint: 'platform.deepseek.com → API keys', contextWindow: 131072 },
@@ -36,7 +37,7 @@ async function askText(reader, prompt, def) {
         return null;
     return a.trim() || def || '';
 }
-function writeGlobalConfig(defaultProvider, providers) {
+export function writeGlobalConfig(defaultProvider, providers) {
     const dir = globalConfigDir();
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'config.json');
@@ -64,12 +65,15 @@ function writeGlobalConfig(defaultProvider, providers) {
 export async function runSetupWizard(reader) {
     out(`\n${pc.bold(pc.magenta(`${APP_DISPLAY_NAME} — birinchi sozlash`))}\n`);
     out(pc.dim("Model qayerda ishlaydi? (keyin istalgan vaqt: datacademy_coder --setup yoki config faylni tahrirlash)\n\n"));
-    out(`  ${pc.cyan('1')}. Lokal model (Ollama) — bepul, oflayn; 7b uchun ~6 GB RAM, GPU bo'lsa tez\n`);
-    out(`  ${pc.cyan('2')}. Bulut API (DeepSeek / Qwen / OpenAI / boshqa) — tez va kuchli, API kalit kerak\n\n`);
-    const mode = await pick(reader, 'Tanlang', 2, 1);
+    out(`  ${pc.cyan('1')}. DataCademy hisobi (${gatewayUrl().replace(/^https?:\/\//, '')}) — eng oson: brauzerda kirasiz, kuchli modellar, API kalit shart emas\n`);
+    out(`  ${pc.cyan('2')}. Lokal model (Ollama) — bepul, oflayn; 7b uchun ~6 GB RAM, GPU bo'lsa tez\n`);
+    out(`  ${pc.cyan('3')}. O'z API kalitingiz (DeepSeek / Qwen / OpenAI / boshqa OpenAI-uyg'un server)\n\n`);
+    const mode = await pick(reader, 'Tanlang', 3, 1);
     if (mode === null)
         return false;
-    if (mode === 1) {
+    if (mode === 1)
+        return runLogin();
+    if (mode === 2) {
         const baseUrl = 'http://localhost:11434';
         let models = [];
         let reachable = false;

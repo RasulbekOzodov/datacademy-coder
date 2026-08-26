@@ -78,6 +78,8 @@ export interface LLMProvider {
   healthCheck(): Promise<void>;
   /** Human-readable info for /model. */
   describe(): Promise<string>;
+  /** Account usage/balance, when the server offers it (DataCademy gateway: GET /v1/usage). */
+  usage?(): Promise<Record<string, unknown>>;
 }
 
 /** Normalized result of one model response, regardless of how tool calls were transported. */

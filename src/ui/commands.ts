@@ -57,6 +57,7 @@ ${pc.bold('Commands')}
   /models               list models available on the provider
   /provider [name]      show or switch provider (from config)
   /status               cwd, model, tool mode, context usage, git changes
+  /usage                DataCademy hisobi: balans, kunlik limit, sarf
   /compact              shrink the conversation to free context
   /clear                start a fresh conversation
   /undo                 revert the last file change made by the agent
@@ -157,6 +158,30 @@ export async function handleCommand(line: string, ctx: CommandContext): Promise<
         print(pc.dim(await provider.describe()));
       } catch (err) {
         print(pc.red((err as Error).message));
+      }
+      return 'handled';
+    }
+
+    case 'usage':
+    case 'balance': {
+      if (!agent.provider.usage) {
+        print(pc.dim('bu provider balans ma\'lumotini bermaydi (faqat DataCademy hisobi uchun)'));
+        return 'handled';
+      }
+      try {
+        const u = (await agent.provider.usage()) as Record<string, unknown>;
+        const n = (v: unknown) => Number(v ?? 0).toLocaleString('ru-RU');
+        const lines = [
+          `hisob: ${String(u.email ?? '')}${u.plan_label ? ` · tarif: ${String(u.plan_label)}` : ' · tarif yo\'q'}`,
+          `balans: ${n(u.total_remaining)} kredit (obuna ${n(u.subscription_remaining)} + top-up ${n(u.topup_remaining)})`,
+          u.daily_cap ? `bugun: ${n(u.daily_used)} / ${n(u.daily_cap)} (kunlik limit)` : `bugun: ${n(u.daily_used)}`,
+          u.period_end ? `obuna muddati: ${new Date(Number(u.period_end)).toLocaleDateString('ru-RU')}` : '',
+          u.last_30_days ? `30 kun: ${n((u.last_30_days as Record<string, unknown>).requests)} so'rov · ${n((u.last_30_days as Record<string, unknown>).credits)} kredit` : '',
+          u.ok === false && u.reason ? pc.yellow(String(u.reason)) : '',
+        ].filter(Boolean);
+        print(pc.dim(lines.join('\n')));
+      } catch (err) {
+        print(pc.red(`balansni olib bo'lmadi: ${(err as Error).message.split('\n')[0]}`));
       }
       return 'handled';
     }

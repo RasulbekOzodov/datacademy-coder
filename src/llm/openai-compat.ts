@@ -174,6 +174,11 @@ export class OpenAICompatProvider implements LLMProvider {
     return this.caps;
   }
 
+  /** DataCademy gateway (and any compatible server) exposes GET /usage next to /chat/completions. */
+  async usage(): Promise<Record<string, unknown>> {
+    return fetchJson<Record<string, unknown>>(`${this.baseUrl}/usage`, { headers: this.headers(), timeoutMs: 8000 });
+  }
+
   async describe(): Promise<string> {
     const c = await this.capabilities();
     return [

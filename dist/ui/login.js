@@ -1,0 +1,81 @@
+import { spawn } from 'node:child_process';
+import os from 'node:os';
+import pc from 'picocolors';
+import { APP_NAME } from '../constants.js';
+import { out } from './render.js';
+import { writeGlobalConfig } from './setup.js';
+export const DEFAULT_GATEWAY_URL = 'https://coder.datacademy.uz';
+export const GATEWAY_PROVIDER_NAME = 'datacademy';
+export function gatewayUrl() {
+    return (process.env.DATACADEMY_GATEWAY_URL ?? DEFAULT_GATEWAY_URL).replace(/\/+$/, '');
+}
+function openBrowser(url) {
+    try {
+        if (process.platform === 'win32')
+            spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+        else if (process.platform === 'darwin')
+            spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+        else
+            spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+    }
+    catch {
+        /* user can open the link manually */
+    }
+}
+/**
+ * Device-code login against the DataCademy gateway. Returns true when a config was written.
+ */
+export async function runLogin(signal) {
+    const base = gatewayUrl();
+    out(`\n${pc.bold(pc.magenta('DataCademy hisobiga ulanish'))} ${pc.dim(base)}\n`);
+    let start;
+    try {
+        const res = await fetch(`${base}/cli/device`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hostname: os.hostname() }), signal });
+        if (!res.ok)
+            throw new Error(`HTTP ${res.status}`);
+        start = (await res.json());
+    }
+    catch (err) {
+        out(`${pc.red(`✗ ${base} bilan bog'lanib bo'lmadi: ${err.message}`)}\n`);
+        return false;
+    }
+    const link = start.verification_uri_complete ?? start.verification_uri;
+    out(`\n  Brauzerda oching: ${pc.cyan(link)}\n`);
+    out(`  Kod: ${pc.bold(pc.green(start.user_code))}\n\n`);
+    out(pc.dim('  tasdiqlanishini kutyapman (Ctrl+C — bekor)...\n'));
+    openBrowser(link);
+    const deadline = Date.now() + (start.expires_in ?? 600) * 1000;
+    const interval = Math.max(2, start.interval ?? 3) * 1000;
+    while (Date.now() < deadline) {
+        if (signal?.aborted)
+            return false;
+        await new Promise((r) => setTimeout(r, interval));
+        let data;
+        try {
+            const res = await fetch(`${base}/cli/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: start.device_code }), signal });
+            data = (await res.json());
+        }
+        catch (err) {
+            if (err.name === 'AbortError')
+                return false;
+            continue; // transient network error, keep polling
+        }
+        if (data.status === 'pending')
+            continue;
+        if (data.status !== 'ok' || !data.api_key) {
+            out(`${pc.red(`✗ login bekor qilindi (${data.status})`)}\n`);
+            return false;
+        }
+        const baseUrl = data.base_url ?? `${base}/v1`;
+        const model = data.model ?? 'datacademy-pro';
+        const file = writeGlobalConfig(GATEWAY_PROVIDER_NAME, {
+            [GATEWAY_PROVIDER_NAME]: { type: 'openai', baseUrl, apiKey: data.api_key, model, contextWindow: 131072, temperature: 0.1, maxTokens: 8192 },
+        });
+        out(`\n${pc.green('✓')} ulandi — model ${pc.bold(model)}, config: ${pc.dim(file)}\n`);
+        out(pc.dim(`  ${APP_NAME} — ishga tushirish · /usage — balans · /model datacademy-fast — arzon model\n`));
+        return true;
+    }
+    out(`${pc.red('✗ kod muddati tugadi (10 daqiqa). Qayta: ' + APP_NAME + ' login')}\n`);
+    return false;
+}
+//# sourceMappingURL=login.js.map

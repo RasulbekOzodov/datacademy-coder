@@ -13,6 +13,7 @@ import { PermissionManager } from './permissions/manager.js';
 import { createDefaultTools } from './tools/registry.js';
 import { shellFallbackNote } from './tools/shell.js';
 import { LineReader, TerminalUI, makePrompter, startRepl } from './ui/repl.js';
+import { runLogin } from './ui/login.js';
 import { hasAnyConfig, runSetupWizard } from './ui/setup.js';
 import { out } from './ui/render.js';
 const program = new Command();
@@ -20,6 +21,7 @@ program
     .name(APP_NAME)
     .description(`${APP_DISPLAY_NAME} — a terminal coding agent powered by locally running LLMs (Ollama, LM Studio, llama.cpp, vLLM).`)
     .version(VERSION)
+    .argument('[command]', 'login — connect to a DataCademy account')
     .option('-p, --prompt <text>', 'run a single request and exit (non-interactive)')
     .option('--provider <name>', 'provider name from config (default: config.defaultProvider)')
     .option('-m, --model <name>', 'model name to use with the provider')
@@ -33,7 +35,15 @@ program
     .option('-r, --resume [id]', 'resume a previous conversation (pick from a list, or give its id)')
     .parse(process.argv);
 const opts = program.opts();
+const subcommand = program.args[0];
 async function main() {
+    // `datacademy_coder login` — connect this machine to a DataCademy account (device-code flow).
+    if (subcommand === 'login') {
+        const ok = await runLogin();
+        process.exit(ok ? 0 : 1);
+    }
+    if (subcommand)
+        throw new Error(`Noma'lum buyruq: ${subcommand}. Mavjud: login (yoki --help)`);
     const cwd = path.resolve(opts.cwd ?? process.cwd());
     if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
         throw new Error(`Directory not found: ${cwd}`);

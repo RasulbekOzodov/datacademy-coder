@@ -151,6 +151,10 @@ export class OpenAICompatProvider {
         this.caps = { nativeTools: this.cfg.nativeTools ?? true, contextWindow: this.contextWindow };
         return this.caps;
     }
+    /** DataCademy gateway (and any compatible server) exposes GET /usage next to /chat/completions. */
+    async usage() {
+        return fetchJson(`${this.baseUrl}/usage`, { headers: this.headers(), timeoutMs: 8000 });
+    }
     async describe() {
         const c = await this.capabilities();
         return [

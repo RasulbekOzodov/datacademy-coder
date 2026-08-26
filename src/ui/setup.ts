@@ -6,6 +6,7 @@ import type { ProviderConfig } from '../config/schema.js';
 import { APP_DISPLAY_NAME, APP_NAME } from '../constants.js';
 import { createProvider } from '../llm/registry.js';
 import { fetchJson } from '../llm/stream-readers.js';
+import { gatewayUrl, runLogin } from './login.js';
 import type { LineReader } from './repl.js';
 import { out } from './render.js';
 
@@ -49,7 +50,7 @@ async function askText(reader: LineReader, prompt: string, def?: string): Promis
   return a.trim() || def || '';
 }
 
-function writeGlobalConfig(defaultProvider: string, providers: Record<string, ProviderConfig>): string {
+export function writeGlobalConfig(defaultProvider: string, providers: Record<string, ProviderConfig>): string {
   const dir = globalConfigDir();
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, 'config.json');
@@ -76,12 +77,15 @@ function writeGlobalConfig(defaultProvider: string, providers: Record<string, Pr
 export async function runSetupWizard(reader: LineReader): Promise<boolean> {
   out(`\n${pc.bold(pc.magenta(`${APP_DISPLAY_NAME} — birinchi sozlash`))}\n`);
   out(pc.dim("Model qayerda ishlaydi? (keyin istalgan vaqt: datacademy_coder --setup yoki config faylni tahrirlash)\n\n"));
-  out(`  ${pc.cyan('1')}. Lokal model (Ollama) — bepul, oflayn; 7b uchun ~6 GB RAM, GPU bo'lsa tez\n`);
-  out(`  ${pc.cyan('2')}. Bulut API (DeepSeek / Qwen / OpenAI / boshqa) — tez va kuchli, API kalit kerak\n\n`);
-  const mode = await pick(reader, 'Tanlang', 2, 1);
+  out(`  ${pc.cyan('1')}. DataCademy hisobi (${gatewayUrl().replace(/^https?:\/\//, '')}) — eng oson: brauzerda kirasiz, kuchli modellar, API kalit shart emas\n`);
+  out(`  ${pc.cyan('2')}. Lokal model (Ollama) — bepul, oflayn; 7b uchun ~6 GB RAM, GPU bo'lsa tez\n`);
+  out(`  ${pc.cyan('3')}. O'z API kalitingiz (DeepSeek / Qwen / OpenAI / boshqa OpenAI-uyg'un server)\n\n`);
+  const mode = await pick(reader, 'Tanlang', 3, 1);
   if (mode === null) return false;
 
-  if (mode === 1) {
+  if (mode === 1) return runLogin();
+
+  if (mode === 2) {
     const baseUrl = 'http://localhost:11434';
     let models: string[] = [];
     let reachable = false;

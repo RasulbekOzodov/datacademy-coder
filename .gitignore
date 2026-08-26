@@ -3,3 +3,7 @@ node_modules/
 .datacademy_coder/logs/
 .datacademy_coder/tmp/
 .datacademy_coder/config.json
+gateway/node_modules/
+gateway/dist/
+gateway/data/
+gateway/.env

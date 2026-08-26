@@ -47,13 +47,15 @@ Config bo'lmasa `datacademy_coder` avtomatik **sozlash ustasini** ochadi (keyin 
 
 ```
 DataCademy Coder — birinchi sozlash
-  1. Lokal model (Ollama) — bepul, oflayn
-  2. Bulut API (DeepSeek / Qwen / OpenAI / boshqa) — tez va kuchli, API kalit kerak
-Tanlang [1-2, Enter = 1]:
+  1. DataCademy hisobi (coder.datacademy.uz) — eng oson: brauzerda kirasiz, API kalit shart emas
+  2. Lokal model (Ollama) — bepul, oflayn
+  3. O'z API kalitingiz (DeepSeek / Qwen / OpenAI / boshqa)
+Tanlang [1-3, Enter = 1]:
 ```
 
+- **DataCademy hisobi** (`datacademy_coder login`): terminalda kod va havola chiqadi, brauzerda kirib tasdiqlaysiz — kalit avtomatik config'ga tushadi. Modellar: `datacademy-pro` (DeepSeek V4 Pro) va `datacademy-fast` (Qwen3-Coder-Next). Balans: `/usage`. Tariflar va kabinet: https://coder.datacademy.uz. Gateway manbasi — [`gateway/`](gateway/README.md).
 - **Lokal**: Ollama'dagi modellar ro'yxatidan tanlaysiz (yoki nom kiritasiz); Ollama ishlamayotgan bo'lsa o'rnatish havolasi ko'rsatiladi.
-- **API**: provider (DeepSeek V4 Pro / Qwen3-Coder-Next via OpenRouter / OpenAI / boshqa OpenAI-uyg'un manzil) → model → API kalit. Kalit darhol tekshiriladi (noto'g'ri bo'lsa qayta so'raydi) va `~/.datacademy_coder/config.json` ga yoziladi; bo'sh qoldirsangiz muhit o'zgaruvchisidan (`DEEPSEEK_API_KEY` kabi) olinadi. Lokal Ollama ham zaxira sifatida config'ga qo'shiladi (`--provider ollama`).
+- **O'z kalitingiz**: provider (DeepSeek / Qwen via OpenRouter / OpenAI / boshqa OpenAI-uyg'un manzil) → model → API kalit. Kalit darhol tekshiriladi va `~/.datacademy_coder/config.json` ga yoziladi; bo'sh qoldirsangiz muhit o'zgaruvchisidan (`DEEPSEEK_API_KEY` kabi) olinadi. Lokal Ollama ham zaxira sifatida config'ga qo'shiladi (`--provider ollama`).
 
 ## Ishlatish
 
