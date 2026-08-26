@@ -23,7 +23,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "prepublishOnly": "npm run build && npm test",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test",
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",

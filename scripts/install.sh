@@ -33,8 +33,13 @@ fi
 
 # 2. The package
 step "$PACKAGE o'rnatilmoqda (npm)"
-if npm install -g "$PACKAGE" --no-fund --no-audit >/dev/null 2>&1; then :; else
-  step "ruxsat kerak — sudo bilan qayta"; sudo npm install -g "$PACKAGE" --no-fund --no-audit >/dev/null
+SPEC="$PACKAGE"
+if ! npm view "$PACKAGE" version >/dev/null 2>&1; then
+  step "npm registry'da topilmadi — GitHub'dan o'rnatiladi"
+  SPEC="github:RasulbekOzodov/datacademy-coder"
+fi
+if npm install -g "$SPEC" --no-fund --no-audit >/dev/null 2>&1; then :; else
+  step "ruxsat kerak — sudo bilan qayta"; sudo npm install -g "$SPEC" --no-fund --no-audit >/dev/null
 fi
 
 # 3. Ollama + model
