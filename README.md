@@ -71,8 +71,8 @@ datacademy_coder --debug          # xom so'rov/javoblar .datacademy_coder/logs/ 
 datacademy_coder --init           # namuna config yaratadi
 ```
 
-REPL ichida: `/help /model /models /provider /status /compact /clear /undo /yolo /resume /sessions /save /load /exit`.
-Ctrl+C — joriy javobni to'xtatadi; ikki marta — chiqish.
+REPL ichida: `/help /model /models /provider /status /usage /compact /clear /undo /yolo /resume /sessions /save /load /exit`.
+`/` yozilishi bilan buyruqlar ro'yxati (tavsiflar bilan) chiqadi, **Tab** — to'ldirish. Ctrl+C — joriy javobni to'xtatadi; ikki marta — chiqish.
 
 **Suhbatlar** har javobdan keyin avtomatik `.datacademy_coder/sessions/` ga saqlanadi:
 - `datacademy_coder --continue` (`-c`) — shu papkadagi oxirgi suhbatni davom ettirish

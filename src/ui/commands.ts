@@ -50,25 +50,43 @@ export function applySession(ctx: CommandContext, id: string): string {
 
 export type CommandOutcome = 'handled' | 'exit' | 'not-a-command';
 
+/** Single source of truth for slash commands: /help, the "/" palette and Tab completion all use it. */
+export const COMMANDS: Array<{ name: string; args?: string; desc: string }> = [
+  { name: 'help', desc: "barcha buyruqlar (shu ro'yxat)" },
+  { name: 'model', args: '[nom]', desc: 'joriy model haqida / modelni almashtirish' },
+  { name: 'models', desc: 'providerdagi modellar' },
+  { name: 'provider', args: '[nom]', desc: "provider ko'rish / almashtirish (config'dan)" },
+  { name: 'status', desc: 'cwd, model, tool rejimi, context, git' },
+  { name: 'usage', desc: 'DataCademy hisobi: balans, kunlik limit, sarf' },
+  { name: 'compact', desc: "suhbatni qisqartirish (context bo'shatish)" },
+  { name: 'clear', desc: 'yangi suhbat' },
+  { name: 'undo', desc: "agentning oxirgi fayl o'zgarishini qaytarish" },
+  { name: 'yolo', desc: 'yozish/shell uchun avtomatik ruxsat (yoq/o\'chir)' },
+  { name: 'resume', args: '[id]', desc: 'oldingi suhbatni tanlab davom ettirish' },
+  { name: 'sessions', desc: "saqlangan suhbatlar ro'yxati" },
+  { name: 'save', args: '[nom]', desc: 'suhbatni nom bilan saqlash (avto-saqlash ham bor)' },
+  { name: 'load', args: '<id>', desc: 'suhbatni id bilan yuklash' },
+  { name: 'exit', desc: 'chiqish (Ctrl+C ikki marta ham)' },
+];
+
+/** Names accepted by Tab completion (aliases included). */
+export const COMMAND_NAMES = [...COMMANDS.map((c) => c.name), 'quit', 'balance', 'continue'];
+
+export function commandPalette(filter = ''): string {
+  const f = filter.replace(/^\//, '').toLowerCase();
+  const rows = COMMANDS.filter((c) => c.name.startsWith(f));
+  if (!rows.length) return pc.dim(`  /${f}… — bunday buyruq yo'q (/help)`);
+  const width = Math.max(...rows.map((c) => c.name.length + (c.args ? c.args.length + 1 : 0))) + 2;
+  return rows.map((c) => `  ${pc.cyan('/' + c.name)}${c.args ? ' ' + pc.dim(c.args) : ''}${' '.repeat(Math.max(1, width - c.name.length - (c.args ? c.args.length + 1 : 0)))}${pc.dim(c.desc)}`).join('\n');
+}
+
 const HELP = `
-${pc.bold('Commands')}
-  /help                 show this help
-  /model [name]         show current model info, or switch model (same provider)
-  /models               list models available on the provider
-  /provider [name]      show or switch provider (from config)
-  /status               cwd, model, tool mode, context usage, git changes
-  /usage                DataCademy hisobi: balans, kunlik limit, sarf
-  /compact              shrink the conversation to free context
-  /clear                start a fresh conversation
-  /undo                 revert the last file change made by the agent
-  /yolo                 toggle auto-approve for write/shell actions
-  /resume [id]          pick a previous conversation in this folder and continue it
-  /sessions             list saved conversations
-  /save [name]          save under a custom name (conversations auto-save after every answer)
-  /load <id>            load a saved conversation by id
-  /exit                 quit (Ctrl+C twice also works)
+${pc.bold('Buyruqlar')}  ${pc.dim('(/ yozing — ro\'yxat chiqadi, Tab — to\'ldirish)')}
+${commandPalette()}
 
 ${pc.bold('CLI')}
+  ${APP_NAME} login             DataCademy hisobiga ulanish
+  ${APP_NAME} --setup           sozlash ustasi (hisob / lokal / API)
   ${APP_NAME} --continue        continue the most recent conversation in this folder
   ${APP_NAME} --resume [id]     pick (or open) a previous conversation
 

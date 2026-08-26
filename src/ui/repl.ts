@@ -8,7 +8,7 @@ import type { ToolCall } from '../llm/types.js';
 import type { ToolResult } from '../tools/types.js';
 import { saveSession } from '../agent/session.js';
 import { banner } from './banner.js';
-import { applySession, handleCommand, pickSession } from './commands.js';
+import { COMMAND_NAMES, applySession, commandPalette, handleCommand, pickSession } from './commands.js';
 import { Spinner, colorDiff, indent, out, renderToolResult, renderToolResultBody, renderToolStart } from './render.js';
 
 export class TerminalUI implements AgentUI {
@@ -64,7 +64,30 @@ export class LineReader {
 
   constructor() {
     // crlfDelay: Infinity -> "\r\n" is always one Enter (Windows terminals can otherwise yield an extra empty line).
-    this.rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY ?? false, crlfDelay: Infinity });
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: process.stdin.isTTY ?? false,
+      crlfDelay: Infinity,
+      // Tab completion for slash commands.
+      completer: (line: string): [string[], string] => {
+        if (!line.startsWith('/') || line.includes(' ')) return [[], line];
+        const hits = COMMAND_NAMES.filter((n) => `/${n}`.startsWith(line)).map((n) => `/${n} `);
+        return [hits, line];
+      },
+    });
+    // "/" palette: as soon as the input is exactly "/", show the command list under the prompt.
+    if (process.stdin.isTTY) {
+      let shownFor = '';
+      process.stdin.on('keypress', () => {
+        const line = this.rl.line;
+        if (line === '/' && shownFor !== '/') {
+          shownFor = '/';
+          out(`\n${commandPalette()}\n`);
+          this.rl.prompt(true);
+        } else if (line !== '/') shownFor = '';
+      });
+    }
     this.rl.on('line', (line) => {
       if (this.waiting) {
         const w = this.waiting;
