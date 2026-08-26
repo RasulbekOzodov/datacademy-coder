@@ -1,0 +1,34 @@
+{
+  "defaultProvider": "ollama",
+  "providers": {
+    "ollama": {
+      "type": "ollama",
+      "baseUrl": "http://localhost:11434",
+      "model": "qwen2.5-coder:7b",
+      "contextWindow": 16384,
+      "keepAlive": "30m"
+    },
+    "lmstudio": {
+      "type": "openai",
+      "baseUrl": "http://localhost:1234/v1",
+      "model": "local-model",
+      "apiKey": "lm-studio",
+      "contextWindow": 16384
+    },
+    "llamacpp": {
+      "type": "openai",
+      "baseUrl": "http://localhost:8080/v1",
+      "model": "default",
+      "contextWindow": 16384
+    }
+  },
+  "toolMode": "auto",
+  "permissions": {
+    "mode": "ask",
+    "allow": []
+  },
+  "maxIterations": 40,
+  "shell": "auto",
+  "shellTimeoutMs": 120000,
+  "maxToolResultChars": 30000
+}

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.datacademy_coder/sessions/
+.datacademy_coder/logs/
+.datacademy_coder/tmp/
+.datacademy_coder/config.json
