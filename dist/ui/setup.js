@@ -90,6 +90,52 @@ function ollamaInstalled() {
     }
     return false;
 }
+function hasCommand(cmd) {
+    try {
+        const probe = process.platform === 'win32' ? spawnSync('where', [cmd], { windowsHide: true, stdio: 'ignore', timeout: 5000 }) : spawnSync('which', [cmd], { stdio: 'ignore', timeout: 5000 });
+        return probe.status === 0;
+    }
+    catch {
+        return false;
+    }
+}
+/** Download the official Windows installer (Inno Setup) and run it silently. Returns the exit code. */
+async function installOllamaWindows() {
+    const url = 'https://ollama.com/download/OllamaSetup.exe';
+    const file = path.join(process.env.TEMP ?? process.env.TMP ?? '.', 'OllamaSetup.exe');
+    out(pc.dim(`  ${url} yuklanmoqda (~700 MB)...\n`));
+    try {
+        const res = await fetch(url, { redirect: 'follow' });
+        if (!res.ok || !res.body)
+            throw new Error(`HTTP ${res.status}`);
+        const total = Number(res.headers.get('content-length') ?? 0);
+        const ws = fs.createWriteStream(file);
+        let got = 0;
+        let lastPct = -1;
+        for await (const chunk of res.body) {
+            ws.write(chunk);
+            got += chunk.length;
+            if (total) {
+                const pct = Math.floor((got / total) * 100);
+                if (pct !== lastPct && pct % 5 === 0) {
+                    lastPct = pct;
+                    out(`\r  ${pct}% (${(got / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB)   `);
+                }
+            }
+        }
+        await new Promise((resolve, reject) => ws.end((err) => (err ? reject(err) : resolve())));
+        out('\n');
+    }
+    catch (err) {
+        out(pc.red(`  yuklab bo'lmadi: ${err.message}\n`));
+        return 1;
+    }
+    out(pc.dim("  o'rnatilmoqda...\n"));
+    const code = await run(file, ['/VERYSILENT', '/NORESTART', '/SP-']);
+    // Inno Setup returns 0 on success; the Ollama app is started by the installer.
+    await new Promise((r) => setTimeout(r, 3000));
+    return code === 0 || ollamaInstalled() ? 0 : code;
+}
 function run(cmd, args, opts = {}) {
     return new Promise((resolve) => {
         const p = spawn(cmd, args, { stdio: 'inherit', windowsHide: true, shell: opts.shell ?? false });
@@ -118,14 +164,26 @@ async function ensureOllama(reader) {
         }
         out(pc.dim("  o'rnatilmoqda (bir necha daqiqa; UAC so'rovi chiqishi mumkin)...\n"));
         let code = 1;
-        if (process.platform === 'win32')
-            code = await run('winget', ['install', '--id', 'Ollama.Ollama', '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
-        else if (process.platform === 'darwin')
-            code = await run('brew', ['install', 'ollama']);
+        if (process.platform === 'win32') {
+            if (hasCommand('winget')) {
+                code = await run('winget', ['install', '--id', 'Ollama.Ollama', '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+                if (code !== 0)
+                    out(pc.dim(`  winget xato kodi ${code} — rasmiy installer yuklanadi\n`));
+            }
+            else
+                out(pc.dim('  winget topilmadi — rasmiy installer yuklanadi\n'));
+            if (code !== 0 || !ollamaInstalled())
+                code = await installOllamaWindows();
+        }
+        else if (process.platform === 'darwin') {
+            code = hasCommand('brew') ? await run('brew', ['install', 'ollama']) : 127;
+            if (code === 127)
+                out(pc.yellow('  Homebrew yo\'q. Ollama\'ni https://ollama.com/download dan o\'rnating (Ollama.app), keyin qayta: datacademy_coder --setup\n'));
+        }
         else
             code = await run('sh', ['-c', 'curl -fsSL https://ollama.com/install.sh | sh']);
         if (code !== 0 || !ollamaInstalled()) {
-            out(pc.red("  o'rnatib bo'lmadi. Qo'lda: https://ollama.com/download , keyin: datacademy_coder --setup\n"));
+            out(pc.red(`  o'rnatib bo'lmadi (kod ${code}). Qo'lda: https://ollama.com/download , keyin: ${APP_NAME} --setup\n`));
             return false;
         }
         out(`${pc.green('✓')} Ollama o'rnatildi\n`);
