@@ -104,7 +104,7 @@ function hasCommand(cmd: string): boolean {
 async function installOllamaWindows(): Promise<number> {
   const url = 'https://ollama.com/download/OllamaSetup.exe';
   const file = path.join(process.env.TEMP ?? process.env.TMP ?? '.', 'OllamaSetup.exe');
-  out(pc.dim(`  ${url} yuklanmoqda (~700 MB)...\n`));
+  out(pc.dim(`  ${url} yuklanmoqda (~1.5 GB, tezlikka qarab bir necha daqiqa)...\n`));
   try {
     const res = await fetch(url, { redirect: 'follow' });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
