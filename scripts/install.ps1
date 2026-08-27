@@ -1,78 +1,121 @@
-# DataCademy Coder — Windows installer
+# DataCademy Coder - Windows installer
 # Usage (PowerShell):  irm https://raw.githubusercontent.com/RasulbekOzodov/datacademy-coder/main/scripts/install.ps1 | iex
 # Options via env vars before running:
-#   $env:DATACADEMY_MODEL = "qwen2.5-coder:3b"   # model to pull (default qwen2.5-coder:7b); "none" = skip
-#   $env:DATACADEMY_SKIP_OLLAMA = "1"            # do not install Ollama (cloud-only usage)
+#   $env:DATACADEMY_MODEL = "qwen2.5-coder:3b"   # local model to pull; default "none" (cloud account first)
+#   $env:DATACADEMY_SKIP_OLLAMA = "1"            # do not install Ollama
+#
+# Everything lives in a function and uses `return` (never `exit`): with `irm | iex` the script runs
+# inside the user's own shell, and `exit` would close their terminal.
 
-$ErrorActionPreference = "Stop"
-$Package = "datacademy-coder"
-$Model = if ($env:DATACADEMY_MODEL) { $env:DATACADEMY_MODEL } else { "qwen2.5-coder:7b" }
+function Install-DataCademyCoder {
+  $ErrorActionPreference = "Continue"
+  $Package = "datacademy-coder"
+  $NodeVersion = "22.20.0"
+  $Model = if ($env:DATACADEMY_MODEL) { $env:DATACADEMY_MODEL } else { "none" }
 
-function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
-function Refresh-Path {
-  $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-}
-function Has-Command($name) { return [bool](Get-Command $name -ErrorAction SilentlyContinue) }
-
-Write-Host ""
-Write-Host "  DATACADEMY CODER installer" -ForegroundColor Magenta
-Write-Host ""
-
-# 1. Node.js >= 20
-$needNode = $true
-if (Has-Command node) {
-  $v = (node --version) -replace "^v", ""
-  if ([int]($v.Split(".")[0]) -ge 20) { $needNode = $false; Write-Step "Node.js $v topildi" }
-  else { Write-Step "Node.js $v eski (20+ kerak) — yangilanadi" }
-}
-if ($needNode) {
-  if (-not (Has-Command winget)) {
-    Write-Host "winget topilmadi. Node.js 22 LTS ni https://nodejs.org dan o'rnating va skriptni qayta ishga tushiring." -ForegroundColor Red
-    exit 1
+  function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
+  function Write-Bad($msg) { Write-Host "  [X] $msg" -ForegroundColor Red }
+  function Write-Ok($msg) { Write-Host "  [OK] $msg" -ForegroundColor Green }
+  function Add-SessionPath($dir) {
+    if ((Test-Path $dir) -and (($env:Path -split ';') -notcontains $dir)) { $env:Path = "$dir;$env:Path" }
   }
-  Write-Step "Node.js LTS o'rnatilmoqda (winget)"
-  winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements | Out-Null
+  function Refresh-Path {
+    $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $user = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machine;$user;$env:Path"
+    Add-SessionPath "$env:ProgramFiles\nodejs"
+    Add-SessionPath "$env:LOCALAPPDATA\Programs\nodejs"
+    Add-SessionPath "$env:APPDATA\npm"
+    Add-SessionPath "$env:LOCALAPPDATA\Programs\Ollama"
+  }
+  function Has-Command($name) { return [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+  function Node-Ok {
+    if (-not (Has-Command node)) { return $false }
+    try { $v = (& node --version) -replace "^v", ""; return ([int]($v.Split(".")[0]) -ge 20) } catch { return $false }
+  }
+
+  Write-Host ""
+  Write-Host "  DATACADEMY CODER installer" -ForegroundColor Magenta
+  Write-Host ""
   Refresh-Path
-  if (-not (Has-Command node)) { Write-Host "Node.js o'rnatildi, lekin PATH yangilanmadi — yangi terminal oching va skriptni qayta ishga tushiring." -ForegroundColor Yellow; exit 1 }
-}
 
-# 2. The package
-Write-Step "$Package o'rnatilmoqda (npm)"
-$installed = $false
-try { npm install -g $Package --no-fund --no-audit 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $installed = $true } } catch {}
-if (-not $installed) {
-  Write-Step "npm registry'da topilmadi — GitHub'dan o'rnatilmoqda"
-  # tarball URL (not github:) — npm on Windows mis-links global git installs to a temp clone
-  npm install -g "https://github.com/RasulbekOzodov/datacademy-coder/archive/refs/heads/main.tar.gz" --no-fund --no-audit | Out-Null
-}
-Refresh-Path
-if (-not (Has-Command datacademy_coder)) { Write-Host "npm global papkasi PATH da emas. 'npm config get prefix' papkasini PATH ga qo'shing." -ForegroundColor Yellow }
+  # ---------- 1. Node.js >= 20
+  if (Node-Ok) {
+    Write-Step "Node.js $(& node --version) topildi"
+  } else {
+    $installed = $false
+    if (Has-Command winget) {
+      Write-Step "Node.js LTS o'rnatilmoqda (winget) - UAC so'rovi chiqishi mumkin"
+      $out = & winget install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements 2>&1
+      Refresh-Path
+      if (Node-Ok) { $installed = $true } else { Write-Host ($out | Select-Object -Last 3 | Out-String).Trim() -ForegroundColor DarkGray }
+    }
+    if (-not $installed) {
+      Write-Step "Node.js $NodeVersion nodejs.org'dan yuklab o'rnatilmoqda"
+      $msi = Join-Path $env:TEMP "node-v$NodeVersion-x64.msi"
+      try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-x64.msi" -OutFile $msi -UseBasicParsing
+        $p = Start-Process msiexec.exe -ArgumentList "/i", "`"$msi`"", "/qn", "/norestart" -Wait -PassThru
+        Refresh-Path
+        if (Node-Ok) { $installed = $true } else { Write-Bad "msiexec kodi: $($p.ExitCode)" }
+      } catch { Write-Bad "yuklab bo'lmadi: $($_.Exception.Message)" }
+    }
+    if (-not $installed) {
+      Write-Bad "Node.js o'rnatilmadi. https://nodejs.org/en/download dan LTS (22) ni o'rnating va skriptni qayta ishga tushiring."
+      return
+    }
+    Write-Ok "Node.js $(& node --version)"
+  }
 
-# 3. Ollama + model (skip for cloud-only)
-if ($env:DATACADEMY_SKIP_OLLAMA -ne "1") {
-  if (-not (Has-Command ollama)) {
-    Write-Step "Ollama o'rnatilmoqda (winget)"
-    winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements | Out-Null
-    Refresh-Path
-    Start-Sleep -Seconds 3
-  } else { Write-Step "Ollama topildi" }
-  if ($Model -ne "none" -and (Has-Command ollama)) {
-    Write-Step "Model yuklanmoqda: $Model (bir necha daqiqa)"
-    ollama pull $Model
-    if ($Model -ne "qwen2.5-coder:7b") {
-      $cfgDir = Join-Path $env:USERPROFILE ".datacademy_coder"
-      $cfg = Join-Path $cfgDir "config.json"
-      if (-not (Test-Path $cfg)) {
-        New-Item -ItemType Directory -Force $cfgDir | Out-Null
-        @{ defaultProvider = "ollama"; providers = @{ ollama = @{ type = "ollama"; model = $Model; contextWindow = 16384 } } } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $cfg
-      }
+  # ---------- 2. The package
+  Write-Step "$Package o'rnatilmoqda (npm)"
+  $spec = $Package
+  $null = & npm view $Package version 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    # Not on the npm registry yet -> install the GitHub tarball (not github: - npm on Windows mis-links global git installs)
+    $spec = "https://github.com/RasulbekOzodov/datacademy-coder/archive/refs/heads/main.tar.gz"
+  }
+  $out = & npm install -g $spec --no-fund --no-audit 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    Write-Bad "npm install xato berdi:"
+    Write-Host ($out | Select-Object -Last 8 | Out-String).Trim() -ForegroundColor DarkGray
+    return
+  }
+  Refresh-Path
+  if (Has-Command datacademy_coder) {
+    Write-Ok "datacademy_coder $(& datacademy_coder --version)"
+  } else {
+    $prefix = (& npm config get prefix).Trim()
+    Add-SessionPath $prefix
+    if (Has-Command datacademy_coder) { Write-Ok "datacademy_coder $(& datacademy_coder --version)" }
+    else { Write-Host "  npm global papkasi ($prefix) PATH da emas - yangi terminal oching yoki PATH ga qo'shing." -ForegroundColor Yellow }
+  }
+
+  # ---------- 3. Ollama + local model (optional)
+  if ($env:DATACADEMY_SKIP_OLLAMA -ne "1" -and $Model -ne "none") {
+    if (-not (Has-Command ollama)) {
+      if (Has-Command winget) {
+        Write-Step "Ollama o'rnatilmoqda (winget)"
+        $null = & winget install --id Ollama.Ollama -e --silent --accept-source-agreements --accept-package-agreements 2>&1
+        Refresh-Path
+        Start-Sleep -Seconds 3
+      } else { Write-Host "  winget yo'q - Ollama'ni https://ollama.com/download dan o'rnating." -ForegroundColor Yellow }
+    } else { Write-Step "Ollama topildi" }
+    if (Has-Command ollama) {
+      Write-Step "Model yuklanmoqda: $Model (bir necha daqiqa)"
+      & ollama pull $Model
     }
   }
+
+  Write-Host ""
+  Write-Host "Tayyor!" -ForegroundColor Green
+  Write-Host "  datacademy_coder login      # DataCademy hisobiga ulash (brauzer ochiladi)"
+  Write-Host "  cd loyiha-papkasi; datacademy_coder"
+  Write-Host "  datacademy_coder --setup    # lokal model (Ollama) yoki o'z API kalitingiz"
+  Write-Host ""
+  Write-Host "  Buyruq topilmasa - yangi terminal oching (PATH yangilanadi)." -ForegroundColor DarkGray
+  Write-Host ""
 }
 
-Write-Host ""
-Write-Host "Tayyor!" -ForegroundColor Green
-Write-Host "  cd loyiha-papkasi"
-Write-Host "  datacademy_coder            # ishga tushirish"
-Write-Host "  datacademy_coder --init     # config namunasi (DeepSeek/Qwen API ham shu yerda)"
-Write-Host ""
+Install-DataCademyCoder

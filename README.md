@@ -14,7 +14,7 @@ irm https://raw.githubusercontent.com/RasulbekOzodov/datacademy-coder/main/scrip
 # macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/RasulbekOzodov/datacademy-coder/main/scripts/install.sh | bash
 ```
-Variantlar: `DATACADEMY_MODEL=qwen2.5-coder:3b` (kichik model), `DATACADEMY_SKIP_OLLAMA=1` (faqat bulut API).
+Installer Node.js (kerak bo'lsa) va paketni o'rnatadi; default'da Ollama'siz (DataCademy hisobi bilan ishlash uchun). Lokal model ham kerak bo'lsa: `$env:DATACADEMY_MODEL="qwen2.5-coder:7b"` (Windows) / `DATACADEMY_MODEL=qwen2.5-coder:7b` (mac/Linux) — Ollama va modelni o'zi qo'yadi. O'rnatishdan keyin: `datacademy_coder login`.
 
 Yoki Node.js 20+ bo'lsa to'g'ridan-to'g'ri npm'dan (yoki, paket npm'ga chiqmagan bo'lsa, GitHub tarball'dan):
 

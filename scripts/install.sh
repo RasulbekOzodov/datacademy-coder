@@ -2,12 +2,13 @@
 # DataCademy Coder — macOS / Linux installer
 # Usage:  curl -fsSL https://raw.githubusercontent.com/RasulbekOzodov/datacademy-coder/main/scripts/install.sh | bash
 # Options (env vars):
-#   DATACADEMY_MODEL=qwen2.5-coder:3b   # model to pull (default qwen2.5-coder:7b); "none" = skip
-#   DATACADEMY_SKIP_OLLAMA=1            # do not install Ollama (cloud-only usage)
+#   DATACADEMY_MODEL=qwen2.5-coder:7b   # local model to pull (default "none": cloud account first; Ollama optional)
+#   DATACADEMY_SKIP_OLLAMA=1            # do not install Ollama
 set -euo pipefail
 
 PACKAGE="datacademy-coder"
-MODEL="${DATACADEMY_MODEL:-qwen2.5-coder:7b}"
+MODEL="${DATACADEMY_MODEL:-none}"
+[ "$MODEL" = "none" ] && DATACADEMY_SKIP_OLLAMA=1
 step() { printf '\033[36m==> %s\033[0m\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -59,7 +60,7 @@ if [ "${DATACADEMY_SKIP_OLLAMA:-0}" != "1" ]; then
 fi
 
 printf '\n\033[32mTayyor!\033[0m\n'
-echo "  cd loyiha-papkasi"
-echo "  datacademy_coder            # ishga tushirish"
-echo "  datacademy_coder --init     # config namunasi (DeepSeek/Qwen API ham shu yerda)"
+echo "  datacademy_coder login      # DataCademy hisobiga ulash (brauzer ochiladi)"
+echo "  cd loyiha-papkasi && datacademy_coder"
+echo "  datacademy_coder --setup    # lokal model (Ollama) yoki o'z API kalitingiz"
 echo
