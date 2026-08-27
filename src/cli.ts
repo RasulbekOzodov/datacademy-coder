@@ -86,8 +86,8 @@ async function main(): Promise<void> {
   // First run (no config anywhere) or --setup: ask where the model runs (local Ollama vs cloud API).
   if (opts.setup || (!hasAnyConfig(cwd) && process.stdin.isTTY && !oneShot)) {
     const done = await runSetupWizard(reader);
-    if (opts.setup && !done) {
-      out(`${pc.dim('setup bekor qilindi')}\n`);
+    if (!done) {
+      out(`\n${pc.yellow("Sozlash tugallanmadi.")} ${pc.dim(`Qayta: ${APP_NAME} --setup`)}\n`);
       reader.close();
       return;
     }

@@ -1,19 +1,19 @@
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import pc from 'picocolors';
 import { globalConfigDir } from '../config/load.js';
 import { APP_DISPLAY_NAME, APP_NAME } from '../constants.js';
-import { createProvider } from '../llm/registry.js';
 import { fetchJson } from '../llm/stream-readers.js';
 import { gatewayUrl, runLogin } from './login.js';
 import { out } from './render.js';
-const CLOUD_PRESETS = [
-    { key: 'deepseek', label: 'DeepSeek V4 Pro — arzon va kuchli (api.deepseek.com)', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-pro', keyHint: 'platform.deepseek.com → API keys', contextWindow: 131072 },
-    { key: 'qwen', label: 'Qwen3-Coder-Next — eng arzon (OpenRouter orqali)', baseUrl: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder-next', keyHint: 'openrouter.ai/keys', contextWindow: 131072 },
-    { key: 'openai', label: 'OpenAI GPT-5.6 Luna (api.openai.com)', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.6-luna', keyHint: 'platform.openai.com/api-keys', contextWindow: 131072 },
-    { key: 'custom', label: "Boshqa OpenAI-uyg'un server (manzil + model o'zingiz kiritasiz)", baseUrl: '', model: '', keyHint: '', contextWindow: 131072 },
-];
+const OLLAMA_URL = 'http://localhost:11434';
 const DEFAULT_LOCAL_MODEL = 'qwen2.5-coder:7b';
+const LOCAL_MODEL_CHOICES = [
+    { id: 'qwen2.5-coder:7b', note: '4.7 GB — sifatli, ~6 GB RAM (GPU bo\'lsa tez)' },
+    { id: 'qwen2.5-coder:3b', note: '1.9 GB — tezroq, kuchsiz kompyuterlar uchun' },
+    { id: 'qwen2.5-coder:14b', note: '9 GB — eng sifatli, 16 GB+ RAM / GPU' },
+];
 export function hasAnyConfig(cwd) {
     return fs.existsSync(path.join(globalConfigDir(), 'config.json')) || fs.existsSync(path.join(cwd, '.datacademy_coder', 'config.json'));
 }
@@ -31,11 +31,14 @@ async function pick(reader, prompt, max, def = 1) {
         out(pc.dim(`  1 dan ${max} gacha raqam kiriting\n`));
     }
 }
-async function askText(reader, prompt, def) {
-    const a = await reader.ask(pc.yellow(`${prompt}${def ? ` [${def}]` : ''}: `));
+async function yesNo(reader, prompt, def = true) {
+    const a = await reader.ask(pc.yellow(`${prompt} [${def ? 'Y/n' : 'y/N'}]: `));
     if (a === null)
         return null;
-    return a.trim() || def || '';
+    const t = a.trim().toLowerCase();
+    if (!t)
+        return def;
+    return t === 'y' || t === 'yes' || t === 'ha';
 }
 export function writeGlobalConfig(defaultProvider, providers) {
     const dir = globalConfigDir();
@@ -59,119 +62,167 @@ export function writeGlobalConfig(defaultProvider, providers) {
     fs.writeFileSync(file, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
     return file;
 }
+// ---------------------------------------------------------------- Ollama helpers
+async function ollamaModels() {
+    try {
+        const tags = await fetchJson(`${OLLAMA_URL}/api/tags`, { timeoutMs: 3000 });
+        return (tags.models ?? []).map((m) => m.name);
+    }
+    catch {
+        return undefined;
+    }
+}
+function ollamaInstalled() {
+    try {
+        const r = spawnSync(process.platform === 'win32' ? 'ollama.exe' : 'ollama', ['--version'], { windowsHide: true, timeout: 8000, stdio: 'ignore' });
+        if (r.status === 0)
+            return true;
+    }
+    catch {
+        /* not on PATH */
+    }
+    if (process.platform === 'win32') {
+        const local = path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Ollama', 'ollama.exe');
+        if (fs.existsSync(local)) {
+            process.env.PATH = `${path.dirname(local)}${path.delimiter}${process.env.PATH ?? ''}`;
+            return true;
+        }
+    }
+    return false;
+}
+function run(cmd, args, opts = {}) {
+    return new Promise((resolve) => {
+        const p = spawn(cmd, args, { stdio: 'inherit', windowsHide: true, shell: opts.shell ?? false });
+        p.on('error', () => resolve(127));
+        p.on('close', (code) => resolve(code ?? 1));
+    });
+}
+async function waitForOllama(seconds) {
+    for (let i = 0; i < seconds; i++) {
+        if (await ollamaModels())
+            return true;
+        await new Promise((r) => setTimeout(r, 1000));
+    }
+    return false;
+}
+/** Make sure the Ollama server answers; offers to install it and starts it when needed. */
+async function ensureOllama(reader) {
+    if (await ollamaModels())
+        return true;
+    if (!ollamaInstalled()) {
+        out(pc.yellow("\nOllama o'rnatilmagan.\n"));
+        const yes = await yesNo(reader, "Ollama'ni hozir o'rnataymi?", true);
+        if (!yes) {
+            out(pc.dim("  Qo'lda: https://ollama.com/download , keyin: datacademy_coder --setup\n"));
+            return false;
+        }
+        out(pc.dim("  o'rnatilmoqda (bir necha daqiqa; UAC so'rovi chiqishi mumkin)...\n"));
+        let code = 1;
+        if (process.platform === 'win32')
+            code = await run('winget', ['install', '--id', 'Ollama.Ollama', '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements']);
+        else if (process.platform === 'darwin')
+            code = await run('brew', ['install', 'ollama']);
+        else
+            code = await run('sh', ['-c', 'curl -fsSL https://ollama.com/install.sh | sh']);
+        if (code !== 0 || !ollamaInstalled()) {
+            out(pc.red("  o'rnatib bo'lmadi. Qo'lda: https://ollama.com/download , keyin: datacademy_coder --setup\n"));
+            return false;
+        }
+        out(`${pc.green('✓')} Ollama o'rnatildi\n`);
+    }
+    // Installed but not answering: start the server in the background.
+    out(pc.dim('  Ollama serveri ishga tushirilmoqda...\n'));
+    try {
+        const p = spawn(process.platform === 'win32' ? 'ollama.exe' : 'ollama', ['serve'], { detached: true, stdio: 'ignore', windowsHide: true });
+        p.unref();
+    }
+    catch {
+        /* maybe the desktop app starts it */
+    }
+    if (await waitForOllama(30))
+        return true;
+    out(pc.red(`  Ollama ${OLLAMA_URL} da javob bermayapti. Boshqa terminalda \`ollama serve\` ni ishga tushiring, keyin: ${APP_NAME} --setup\n`));
+    return false;
+}
+/** Download the model if it is missing (shows Ollama's own progress bar). */
+async function ensureModel(reader, model) {
+    const models = (await ollamaModels()) ?? [];
+    if (models.some((m) => m === model || m.startsWith(`${model}:`)))
+        return true;
+    const yes = await yesNo(reader, `Model ${model} yo'q. Hozir yuklaymi?`, true);
+    if (!yes) {
+        out(pc.dim(`  keyin: ollama pull ${model}\n`));
+        return false;
+    }
+    const code = await run(process.platform === 'win32' ? 'ollama.exe' : 'ollama', ['pull', model]);
+    if (code !== 0) {
+        out(pc.red(`  yuklab bo'lmadi (kod ${code}). Qayta: ollama pull ${model}\n`));
+        return false;
+    }
+    return true;
+}
+// ---------------------------------------------------------------- wizard
 /**
- * First-run wizard. Returns true when a config was written.
+ * First-run wizard: DataCademy account (cloud) or local Ollama. Returns true when the agent is ready to run.
+ * (Own API keys are still supported through the config file — see README.)
  */
 export async function runSetupWizard(reader) {
     out(`\n${pc.bold(pc.magenta(`${APP_DISPLAY_NAME} — birinchi sozlash`))}\n`);
-    out(pc.dim("Model qayerda ishlaydi? (keyin istalgan vaqt: datacademy_coder --setup yoki config faylni tahrirlash)\n\n"));
+    out(pc.dim(`Model qayerda ishlaydi? (keyin istalgan vaqt: ${APP_NAME} --setup)\n\n`));
     out(`  ${pc.cyan('1')}. DataCademy hisobi (${gatewayUrl().replace(/^https?:\/\//, '')}) — eng oson: brauzerda kirasiz, kuchli modellar, API kalit shart emas\n`);
-    out(`  ${pc.cyan('2')}. Lokal model (Ollama) — bepul, oflayn; 7b uchun ~6 GB RAM, GPU bo'lsa tez\n`);
-    out(`  ${pc.cyan('3')}. O'z API kalitingiz (DeepSeek / Qwen / OpenAI / boshqa OpenAI-uyg'un server)\n\n`);
-    const mode = await pick(reader, 'Tanlang', 3, 1);
+    out(`  ${pc.cyan('2')}. Lokal model (Ollama) — bepul, oflayn; kompyuter resursiga bog'liq (7b uchun ~6 GB RAM)\n\n`);
+    const mode = await pick(reader, 'Tanlang', 2, 1);
     if (mode === null)
         return false;
     if (mode === 1)
         return runLogin();
-    if (mode === 2) {
-        const baseUrl = 'http://localhost:11434';
-        let models = [];
-        let reachable = false;
-        try {
-            const tags = await fetchJson(`${baseUrl}/api/tags`, { timeoutMs: 4000 });
-            reachable = true;
-            models = (tags.models ?? []).map((m) => m.name);
-        }
-        catch {
-            /* not running */
-        }
-        if (!reachable) {
-            out(pc.yellow("\nOllama ishlamayapti yoki o'rnatilmagan. O'rnatish: https://ollama.com/download (Windows: winget install Ollama.Ollama)\n"));
-        }
-        let model = DEFAULT_LOCAL_MODEL;
-        if (models.length) {
-            out('\nOllama\'dagi modellar:\n');
-            models.forEach((m, i) => out(`  ${pc.cyan(String(i + 1))}. ${m}\n`));
-            out(`  ${pc.cyan(String(models.length + 1))}. boshqa (nomini kiritasiz, keyin ollama pull qilinadi)\n\n`);
-            const n = await pick(reader, 'Model', models.length + 1, 1);
-            if (n === null)
-                return false;
-            model = n <= models.length ? models[n - 1] : ((await askText(reader, 'Model nomi', DEFAULT_LOCAL_MODEL)) ?? DEFAULT_LOCAL_MODEL);
-        }
-        else {
-            const m = await askText(reader, 'Model nomi', DEFAULT_LOCAL_MODEL);
-            if (m === null)
-                return false;
-            model = m;
-        }
-        const file = writeGlobalConfig('ollama', {
-            ollama: { type: 'ollama', baseUrl, model, contextWindow: 16384, keepAlive: '30m', temperature: 0.1, maxTokens: 2048 },
-        });
-        out(`\n${pc.green('✓')} config yozildi: ${file}\n`);
-        if (!models.includes(model))
-            out(pc.dim(`  modelni yuklang: ollama pull ${model}\n`));
-        return true;
-    }
-    // Cloud API
-    out('\nProvider:\n');
-    CLOUD_PRESETS.forEach((p, i) => out(`  ${pc.cyan(String(i + 1))}. ${p.label}\n`));
-    out('\n');
-    const n = await pick(reader, 'Tanlang', CLOUD_PRESETS.length, 1);
-    if (n === null)
+    // ---- local
+    if (!(await ensureOllama(reader)))
         return false;
-    const preset = CLOUD_PRESETS[n - 1];
-    let baseUrl = preset.baseUrl;
-    let model = preset.model;
-    let name = preset.key;
-    if (preset.key === 'custom') {
-        const b = await askText(reader, 'Base URL (masalan https://api.example.com/v1)');
-        if (!b)
+    const installed = (await ollamaModels()) ?? [];
+    let model = DEFAULT_LOCAL_MODEL;
+    if (installed.length) {
+        out("\nOllama'dagi modellar:\n");
+        installed.forEach((m, i) => out(`  ${pc.cyan(String(i + 1))}. ${m}\n`));
+        out(`  ${pc.cyan(String(installed.length + 1))}. boshqa (ro'yxatdan tanlab yuklash)\n\n`);
+        const n = await pick(reader, 'Model', installed.length + 1, 1);
+        if (n === null)
             return false;
-        baseUrl = b.replace(/\/+$/, '');
-        const m = await askText(reader, 'Model nomi');
-        if (!m)
-            return false;
-        model = m;
-        name = (await askText(reader, 'Provider nomi (config uchun)', 'custom')) ?? 'custom';
+        if (n <= installed.length)
+            model = installed[n - 1];
+        else {
+            const c = await chooseModelToPull(reader);
+            if (!c)
+                return false;
+            model = c;
+        }
     }
     else {
-        const m = await askText(reader, 'Model', preset.model);
-        if (m === null)
+        const c = await chooseModelToPull(reader);
+        if (!c)
             return false;
-        model = m;
+        model = c;
     }
-    let apiKey;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        out(pc.dim(`\nAPI kalit${preset.keyHint ? ` (${preset.keyHint})` : ''}. Kalit ${path.join(globalConfigDir(), 'config.json')} ga saqlanadi.\n`));
-        const k = await askText(reader, 'API kalit');
-        if (k === null)
-            return false;
-        if (!k) {
-            out(pc.dim("  bo'sh — kalit muhit o'zgaruvchisidan olinadi (config'da ${" + name.toUpperCase() + '_API_KEY})\n'));
-            apiKey = `\${${name.toUpperCase()}_API_KEY}`;
-            break;
-        }
-        out(pc.dim('  tekshirilmoqda...\n'));
-        const probe = createProvider(name, { type: 'openai', baseUrl, apiKey: k, model, contextWindow: preset.contextWindow, temperature: 0.1, maxTokens: 8192 });
-        try {
-            await probe.healthCheck();
-            apiKey = k;
-            out(`${pc.green('✓')} ulandi\n`);
-            break;
-        }
-        catch (err) {
-            out(pc.red(`  ✗ ${err.message.split('\n')[0].slice(0, 160)}\n`));
-            if (attempt === 3)
-                return false;
-            out(pc.dim('  qayta urinib ko\'ring (Enter = muhit o\'zgaruvchisidan olish)\n'));
-        }
-    }
-    const file = writeGlobalConfig(name, {
-        [name]: { type: 'openai', baseUrl, apiKey, model, contextWindow: preset.contextWindow, temperature: 0.1, maxTokens: 8192 },
-        ollama: { type: 'ollama', baseUrl: 'http://localhost:11434', model: DEFAULT_LOCAL_MODEL, contextWindow: 16384, keepAlive: '30m', temperature: 0.1, maxTokens: 2048 },
+    if (!(await ensureModel(reader, model)))
+        return false;
+    const file = writeGlobalConfig('ollama', {
+        ollama: { type: 'ollama', baseUrl: OLLAMA_URL, model, contextWindow: 16384, keepAlive: '30m', temperature: 0.1, maxTokens: 2048 },
     });
-    out(`\n${pc.green('✓')} config yozildi: ${file}\n`);
-    out(pc.dim(`  default provider: ${name} (${model}); lokal Ollama ham qo'shildi: ${APP_NAME} --provider ollama\n`));
+    out(`\n${pc.green('✓')} tayyor — lokal model ${pc.bold(model)} ${pc.dim(`(config: ${file})`)}\n`);
     return true;
+}
+async function chooseModelToPull(reader) {
+    out('\nQaysi modelni yuklaymiz?\n');
+    LOCAL_MODEL_CHOICES.forEach((m, i) => out(`  ${pc.cyan(String(i + 1))}. ${m.id}  ${pc.dim(m.note)}\n`));
+    out(`  ${pc.cyan(String(LOCAL_MODEL_CHOICES.length + 1))}. boshqa nom kiritaman\n\n`);
+    const n = await pick(reader, 'Model', LOCAL_MODEL_CHOICES.length + 1, 1);
+    if (n === null)
+        return null;
+    if (n <= LOCAL_MODEL_CHOICES.length)
+        return LOCAL_MODEL_CHOICES[n - 1].id;
+    const a = await reader.ask(pc.yellow(`Model nomi [${DEFAULT_LOCAL_MODEL}]: `));
+    if (a === null)
+        return null;
+    return a.trim() || DEFAULT_LOCAL_MODEL;
 }
 //# sourceMappingURL=setup.js.map

@@ -49,9 +49,10 @@ Config bo'lmasa `datacademy_coder` avtomatik **sozlash ustasini** ochadi (keyin 
 DataCademy Coder — birinchi sozlash
   1. DataCademy hisobi (coder.datacademy.uz) — eng oson: brauzerda kirasiz, API kalit shart emas
   2. Lokal model (Ollama) — bepul, oflayn
-  3. O'z API kalitingiz (DeepSeek / Qwen / OpenAI / boshqa)
-Tanlang [1-3, Enter = 1]:
+Tanlang [1-2, Enter = 1]:
 ```
+
+Lokal rejimda Ollama o'rnatilmagan bo'lsa usta o'zi o'rnatishni taklif qiladi (winget / brew / curl), serverni ishga tushiradi va tanlangan modelni (`qwen2.5-coder:7b` / `3b` / `14b`) progress bilan yuklaydi. O'z API kalitingiz (DeepSeek, OpenRouter, OpenAI …) config fayl orqali ulanadi — quyida "Bulut providerlar".
 
 - **DataCademy hisobi** (`datacademy_coder login`): terminalda kod va havola chiqadi, brauzerda kirib tasdiqlaysiz — kalit avtomatik config'ga tushadi. Modellar: `datacademy-max` (DeepSeek V4 Pro) va `datacademy-fast` (Qwen3-Coder-Next). Balans: `/usage`. Tariflar va kabinet: https://coder.datacademy.uz. Gateway (server tomoni) — alohida repo: `datacademy-gateway`.
 - **Lokal**: Ollama'dagi modellar ro'yxatidan tanlaysiz (yoki nom kiritasiz); Ollama ishlamayotgan bo'lsa o'rnatish havolasi ko'rsatiladi.
