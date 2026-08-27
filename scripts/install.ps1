@@ -17,7 +17,8 @@ function Install-DataCademyCoder {
   function Write-Bad($msg) { Write-Host "  [X] $msg" -ForegroundColor Red }
   function Write-Ok($msg) { Write-Host "  [OK] $msg" -ForegroundColor Green }
   function Add-SessionPath($dir) {
-    if ((Test-Path $dir) -and (($env:Path -split ';') -notcontains $dir)) { $env:Path = "$dir;$env:Path" }
+    if ([string]::IsNullOrWhiteSpace($dir)) { return }
+    if ((Test-Path -LiteralPath $dir) -and (($env:Path -split ';') -notcontains $dir)) { $env:Path = "$dir;$env:Path" }
   }
   function Refresh-Path {
     $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -28,7 +29,7 @@ function Install-DataCademyCoder {
     Add-SessionPath "$env:APPDATA\npm"
     Add-SessionPath "$env:LOCALAPPDATA\Programs\Ollama"
   }
-  function Has-Command($name) { return [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+  function Has-Command($name) { return [bool]((Get-Command $name -ErrorAction SilentlyContinue) -or (Get-Command "$name.cmd" -ErrorAction SilentlyContinue)) }
   function Node-Ok {
     if (-not (Has-Command node)) { return $false }
     try { $v = (& node --version) -replace "^v", ""; return ([int]($v.Split(".")[0]) -ge 20) } catch { return $false }
@@ -38,6 +39,17 @@ function Install-DataCademyCoder {
   Write-Host "  DATACADEMY CODER installer" -ForegroundColor Magenta
   Write-Host ""
   Refresh-Path
+
+  # npm/npx and the installed CLI are .ps1 shims; with the default "Restricted" policy they cannot run.
+  # RemoteSigned for the current user is the standard, admin-free fix (local scripts run, downloaded ones must be signed).
+  try {
+    $pol = Get-ExecutionPolicy -Scope CurrentUser
+    if ($pol -in @("Restricted", "AllSigned", "Undefined")) {
+      Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop
+      Write-Step "PowerShell execution policy (CurrentUser) -> RemoteSigned"
+    }
+  } catch { Write-Host "  execution policy o'zgartirilmadi: $($_.Exception.Message)" -ForegroundColor Yellow }
+  function Npm { param([Parameter(ValueFromRemainingArguments)]$a) & "npm.cmd" @a }
 
   # ---------- 1. Node.js >= 20
   if (Node-Ok) {
@@ -71,12 +83,12 @@ function Install-DataCademyCoder {
   # ---------- 2. The package
   Write-Step "$Package o'rnatilmoqda (npm)"
   $spec = $Package
-  $null = & npm view $Package version 2>$null
+  $null = Npm view $Package version 2>$null
   if ($LASTEXITCODE -ne 0) {
     # Not on the npm registry yet -> install the GitHub tarball (not github: - npm on Windows mis-links global git installs)
     $spec = "https://github.com/RasulbekOzodov/datacademy-coder/archive/refs/heads/main.tar.gz"
   }
-  $out = & npm install -g $spec --no-fund --no-audit 2>&1
+  $out = Npm install -g $spec --no-fund --no-audit 2>&1
   if ($LASTEXITCODE -ne 0) {
     Write-Bad "npm install xato berdi:"
     Write-Host ($out | Select-Object -Last 8 | Out-String).Trim() -ForegroundColor DarkGray
@@ -84,11 +96,11 @@ function Install-DataCademyCoder {
   }
   Refresh-Path
   if (Has-Command datacademy_coder) {
-    Write-Ok "datacademy_coder $(& datacademy_coder --version)"
+    Write-Ok "datacademy_coder $(& datacademy_coder.cmd --version)"
   } else {
-    $prefix = (& npm config get prefix).Trim()
+    $prefix = ((Npm config get prefix 2>$null) | Out-String).Trim()
     Add-SessionPath $prefix
-    if (Has-Command datacademy_coder) { Write-Ok "datacademy_coder $(& datacademy_coder --version)" }
+    if (Has-Command datacademy_coder) { Write-Ok "datacademy_coder $(& datacademy_coder.cmd --version)" }
     else { Write-Host "  npm global papkasi ($prefix) PATH da emas - yangi terminal oching yoki PATH ga qo'shing." -ForegroundColor Yellow }
   }
 
