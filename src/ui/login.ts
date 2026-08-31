@@ -83,7 +83,7 @@ export async function runLogin(signal?: AbortSignal): Promise<boolean> {
         const u = (await res.json()) as Record<string, unknown>;
         const n = (v: unknown) => Number(v ?? 0).toLocaleString('ru-RU');
         out(`  hisob:  ${String(u.email ?? '')}\n`);
-        out(`  tarif:  ${u.plan_label ? String(u.plan_label) : "yo'q (sinov kreditlari)"}\n`);
+        out(`  tarif:  ${u.plan_label ? String(u.plan_label) : "yo'q"}\n`);
         out(`  balans: ${n(u.total_remaining)} kredit${u.plan_label ? '' : ` — tarif: ${base}/pricing`}\n`);
       }
     } catch {
