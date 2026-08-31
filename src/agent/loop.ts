@@ -21,6 +21,10 @@ export interface AgentUI {
   onToolResult(call: ToolCall, result: ToolResult, ms: number): void;
   onInfo(message: string): void;
   onWarn(message: string): void;
+  /** Streaming progress (total received chars, incl. hidden tool-call text) — lets the UI show a live counter. */
+  onStreamProgress?(receivedChars: number): void;
+  /** The tool was permitted and is now actually executing (fires after any permission prompt). */
+  onToolExecuting?(call: ToolCall): void;
 }
 
 export interface AgentOptions {
@@ -423,6 +427,7 @@ export class Agent {
       const decision = await this.opts.permissions.check(tool, call.arguments, this.ctx);
       if (!decision.allowed) result = { content: decision.reason ?? 'Denied.', isError: true };
       else {
+        ui.onToolExecuting?.(call);
         this.ctx.signal = signal;
         result = await tool.execute(call.arguments, this.ctx);
       }
@@ -446,6 +451,7 @@ export class Agent {
     let thinking = '';
     let shownAny = false;
     let firstToken = false;
+    let receivedChars = 0;
     const nativeCalls: ToolCall[] = [];
     let usage: Usage | undefined;
     let finishReason: string | undefined;
@@ -480,6 +486,8 @@ export class Agent {
         switch (ev.type) {
           case 'text_delta':
             rawText += ev.text;
+            receivedChars += ev.text.length;
+            ui.onStreamProgress?.(receivedChars);
             show(gate.push(ev.text));
             if (repetition.push(ev.text)) {
               cutByGuard = true;
@@ -487,11 +495,10 @@ export class Agent {
             }
             break;
           case 'thinking_delta':
+            // Thinking is hidden in the terminal UI — keep the status line alive (no onFirstToken).
             thinking += ev.text;
-            if (!firstToken) {
-              firstToken = true;
-              ui.onFirstToken();
-            }
+            receivedChars += ev.text.length;
+            ui.onStreamProgress?.(receivedChars);
             ui.onThinking(ev.text);
             break;
           case 'tool_call':

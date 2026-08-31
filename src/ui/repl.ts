@@ -9,44 +9,85 @@ import type { ToolResult } from '../tools/types.js';
 import { saveSession } from '../agent/session.js';
 import { banner } from './banner.js';
 import { COMMAND_NAMES, applySession, commandPalette, handleCommand, pickSession } from './commands.js';
-import { Spinner, colorDiff, indent, out, renderToolResult, renderToolResultBody, renderToolStart } from './render.js';
+import { StatusLine, colorDiff, indent, out, renderToolResult, renderToolResultBody, renderToolStart } from './render.js';
+
+/** Hidden chars generated after the last visible text before we assume a tool call is being written. */
+const HIDDEN_CALL_THRESHOLD = 200;
 
 export class TerminalUI implements AgentUI {
-  private spinner = new Spinner();
+  private status = new StatusLine();
   private lastWasText = false;
+  /** Visible response text already streamed for the current model turn. */
+  private visible = false;
+  private streamedChars = 0;
+  private charsAtLastText = 0;
 
   onTurnStart(): void {
-    this.spinner.start('thinking');
+    this.visible = false;
+    this.streamedChars = 0;
+    this.charsAtLastText = 0;
+    this.status.start("o'ylanmoqda");
   }
   onFirstToken(): void {
-    this.spinner.stop();
+    this.status.stop();
+  }
+  onStreamProgress(chars: number): void {
+    this.streamedChars = chars;
+    const approxTokens = Math.round(chars / 3.5);
+    if (!this.visible) {
+      // Still nothing on screen (thinking, or a tool call being written from the start).
+      if (approxTokens > 0) this.status.update(`yozmoqda… ~${approxTokens} token`);
+      return;
+    }
+    // Text was shown, then the model went quiet: it is writing a hidden <tool_call>
+    // (e.g. a whole file into write_file args) — bring the status line back on its own line.
+    const hidden = chars - this.charsAtLastText;
+    if (hidden > HIDDEN_CALL_THRESHOLD) {
+      if (!this.status.isActive) {
+        if (this.lastWasText) {
+          out('\n');
+          this.lastWasText = false;
+        }
+        this.status.start('tool chaqiruvi yozilmoqda');
+      } else {
+        this.status.update(`tool chaqiruvi yozilmoqda… ~${Math.round(hidden / 3.5)} token`);
+      }
+    }
   }
   onText(delta: string): void {
+    this.status.stop();
     out(delta);
     this.lastWasText = true;
+    this.visible = true;
+    this.charsAtLastText = this.streamedChars;
   }
   onThinking(_delta: string): void {
     /* hidden; see --debug logs */
   }
   onResponseEnd(): void {
+    this.status.stop();
     if (this.lastWasText) out('\n');
     this.lastWasText = false;
   }
   onToolStart(_call: ToolCall, description: string): void {
-    this.spinner.stop();
+    this.status.stop();
     out(`${renderToolStart(description)}\n`);
   }
+  onToolExecuting(call: ToolCall): void {
+    this.status.start(`${call.name} bajarilmoqda`);
+  }
   onToolResult(_call: ToolCall, result: ToolResult, ms: number): void {
+    this.status.stop();
     out(`${renderToolResult(result, ms)}\n`);
     const body = renderToolResultBody(result);
     if (body) out(`${body}\n`);
   }
   onInfo(message: string): void {
-    this.spinner.stop();
+    this.status.stop();
     out(`${pc.dim(`ℹ ${message}`)}\n`);
   }
   onWarn(message: string): void {
-    this.spinner.stop();
+    this.status.stop();
     out(`${pc.yellow(`⚠ ${message}`)}\n`);
   }
 }

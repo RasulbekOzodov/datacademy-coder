@@ -382,6 +382,7 @@ export class Agent {
             if (!decision.allowed)
                 result = { content: decision.reason ?? 'Denied.', isError: true };
             else {
+                ui.onToolExecuting?.(call);
                 this.ctx.signal = signal;
                 result = await tool.execute(call.arguments, this.ctx);
             }
@@ -407,6 +408,7 @@ export class Agent {
         let thinking = '';
         let shownAny = false;
         let firstToken = false;
+        let receivedChars = 0;
         const nativeCalls = [];
         let usage;
         let finishReason;
@@ -439,6 +441,8 @@ export class Agent {
                 switch (ev.type) {
                     case 'text_delta':
                         rawText += ev.text;
+                        receivedChars += ev.text.length;
+                        ui.onStreamProgress?.(receivedChars);
                         show(gate.push(ev.text));
                         if (repetition.push(ev.text)) {
                             cutByGuard = true;
@@ -446,11 +450,10 @@ export class Agent {
                         }
                         break;
                     case 'thinking_delta':
+                        // Thinking is hidden in the terminal UI — keep the status line alive (no onFirstToken).
                         thinking += ev.text;
-                        if (!firstToken) {
-                            firstToken = true;
-                            ui.onFirstToken();
-                        }
+                        receivedChars += ev.text.length;
+                        ui.onStreamProgress?.(receivedChars);
                         ui.onThinking(ev.text);
                         break;
                     case 'tool_call':
